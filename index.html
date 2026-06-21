@@ -1,0 +1,1953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+
+    <!-- ==================== PWA / iOS 独立 App 核心 meta ==================== -->
+    <!-- 让 iPhone 添加到主屏幕后以全屏 App 模式运行（隐藏 Safari 地址栏和底部工具栏） -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 状态栏样式：black-translucent = 半透明黑色，内容可延伸到状态栏下方 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- 主屏幕 App 名称 -->
+    <meta name="apple-mobile-web-app-title" content="生活手记">
+    <!-- 视口：适配 iPhone 安全区域，禁止用户缩放（App 体验） -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no">
+    <!-- 浏览器主题色（跟随系统亮暗模式） -->
+    <meta name="theme-color" content="#f0f0f5" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <!-- 微软 Tile -->
+    <meta name="msapplication-TileColor" content="#3b82f6">
+
+    <!-- PWA 清单文件（外部引用，兼容不支持内联 Blob URL 的环境） -->
+    <link rel="manifest" href="./manifest.json">
+    <!-- 苹果桌面图标回退（若动态 Canvas 图标未生成则使用此 SVG） -->
+    <link rel="apple-touch-icon" href="https://api.iconify.design/fluent-emoji-flat:blue-book.svg">
+
+    <title>生活抽屉手记</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- html2pdf.js：纯前端 PDF 生成，绕过手机浏览器打印系统，避免强制添加网址/日期页脚 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- ==================== Web App Manifest (内联) ==================== -->
+    <script>
+        // 动态生成 manifest 并通过 blob URL 注入（适配亮/暗模式）
+        (function injectManifest() {
+            const manifest = {
+                name: '生活抽屉手记',
+                short_name: '手记',
+                description: '记录生活，随手可及',
+                start_url: location.href,
+                display: 'standalone',
+                orientation: 'portrait',
+                background_color: '#f0f0f5',
+                theme_color: '#3b82f6',
+                icons: [{
+                    src: 'data:image/svg+xml,' + encodeURIComponent(
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">' +
+                        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+                        '<stop offset="0%" stop-color="#4F46E5"/>' +
+                        '<stop offset="100%" stop-color="#3B82F6"/>' +
+                        '</linearGradient></defs>' +
+                        '<rect width="192" height="192" rx="40" fill="url(#g)"/>' +
+                        '<rect x="52" y="36" width="88" height="120" rx="12" fill="white" opacity="0.95"/>' +
+                        '<rect x="60" y="52" width="72" height="4" rx="2" fill="#93C5FD"/>' +
+                        '<rect x="60" y="66" width="56" height="4" rx="2" fill="#93C5FD"/>' +
+                        '<rect x="60" y="80" width="64" height="4" rx="2" fill="#93C5FD"/>' +
+                        '<circle cx="76" cy="108" r="16" fill="#3B82F6" opacity="0.2"/>' +
+                        '<polygon points="72,100 72,116 88,108" fill="#3B82F6"/>' +
+                        '</svg>'
+                    ),
+                    sizes: '192x192',
+                    type: 'image/svg+xml',
+                    purpose: 'any maskable'
+                }]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        })();
+    </script>
+
+    <style>
+        /* ==================== CSS 变量与主题系统 ==================== */
+        :root {
+            --bg: #f0f0f5;
+            --card-bg: #ffffff;
+            --card-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+            --text-primary: #1a1a2e;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --border: #e5e7eb;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-light: #eff6ff;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --overlay: rgba(0,0,0,0.4);
+            --toast-bg: #1f2937;
+            --toast-text: #f9fafb;
+            --dashed-border: #d1d5db;
+            --header-bg: rgba(240,240,245,0.85);
+            /* iPhone 安全区域（刘海屏/灵动岛） */
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+        }
+
+        /* 暗色模式 */
+        body.dark {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --card-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --border: #334155;
+            --accent: #60a5fa;
+            --accent-hover: #3b82f6;
+            --accent-light: #1e3a5f;
+            --danger: #f87171;
+            --danger-hover: #ef4444;
+            --overlay: rgba(0,0,0,0.7);
+            --toast-bg: #e2e8f0;
+            --toast-text: #0f172a;
+            --dashed-border: #475569;
+            --header-bg: rgba(15,23,42,0.85);
+        }
+
+        /* ==================== 基础样式 + App 化增强 ==================== */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        /* 文本输入区域允许选中 */
+        input, textarea, [contenteditable] {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
+        html {
+            /* 防止 iOS 橡皮筋回弹效果（App 化体验） */
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+            /* 全屏模式下让内容铺满 */
+            height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-primary);
+            transition: background-color 0.35s ease, color 0.35s ease;
+            /* 安全区域适配 */
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
+            padding-left: var(--safe-left);
+            padding-right: var(--safe-right);
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            /* 防止 iOS 双击缩放 */
+            touch-action: manipulation;
+            /* 防止 iOS 长按弹出菜单（图片除外） */
+            -webkit-touch-callout: none;
+        }
+
+        /* ==================== 毛玻璃导航栏 ==================== */
+        .nav-header {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            background: var(--header-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            transition: background-color 0.35s ease, border-color 0.35s ease;
+            /* 确保导航栏不被安全区域遮挡 */
+            padding-top: max(1rem, var(--safe-top));
+        }
+
+        /* ==================== 备份按钮样式 ==================== */
+        .backup-btn {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .backup-btn:active {
+            transform: scale(0.93);
+        }
+        .btn-export {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.25);
+        }
+        .btn-export:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 4px 14px rgba(59,130,246,0.35);
+        }
+        .btn-import {
+            background: var(--success);
+            color: white;
+            box-shadow: 0 2px 8px rgba(16,185,129,0.25);
+        }
+        .btn-import:hover {
+            box-shadow: 0 4px 14px rgba(16,185,129,0.35);
+        }
+
+        /* ==================== 苹果风卡片 ==================== */
+        .apple-card {
+            background: var(--card-bg);
+            border-radius: 18px;
+            box-shadow: var(--card-shadow);
+            transition: all 0.25s cubic-bezier(0.2, 0.8, 0.4, 1);
+            border: 1px solid var(--border);
+        }
+        @media (hover: hover) {
+            .apple-card:hover {
+                box-shadow: 0 8px 24px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+                transform: translateY(-1px);
+            }
+            body.dark .apple-card:hover {
+                box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+            }
+        }
+        .apple-card:active {
+            transform: scale(0.975);
+            transition: all 0.1s ease;
+        }
+
+        /* ==================== 新建占位卡片 ==================== */
+        .add-placeholder {
+            border: 2px dashed var(--dashed-border);
+            border-radius: 18px;
+            transition: all 0.25s ease;
+            background: transparent;
+        }
+        .add-placeholder:active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-light);
+            transform: scale(0.97);
+        }
+
+        /* ==================== Toast 提示 ==================== */
+        .toast-container {
+            position: fixed;
+            top: calc(20px + var(--safe-top));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1), toastOut 0.25s cubic-bezier(0.4, 0, 0.2, 1) 2.2s forwards;
+            white-space: nowrap;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error   { border-left: 3px solid var(--danger);  }
+        .toast.info    { border-left: 3px solid var(--accent);   }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(-20px) scale(0.92); }
+            to   { opacity: 1; transform: translateY(0) scale(1);      }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateY(0) scale(1);      }
+            to   { opacity: 0; transform: translateY(-12px) scale(0.95); }
+        }
+
+        /* ==================== 自定义弹窗 (Modal) ==================== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--overlay);
+            z-index: 9990;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        .modal-dialog {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 28px 24px 20px;
+            width: 90%;
+            max-width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid var(--border);
+        }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+            to   { opacity: 1; transform: scale(1)   translateY(0);    }
+        }
+
+        /* ==================== 编辑区 ==================== */
+        .edit-textarea {
+            background: var(--bg);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            color: var(--text-primary);
+        }
+        .edit-textarea:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        /* ==================== 搜索高亮 ==================== */
+        .search-highlight {
+            background: #fde68a;
+            color: #1a1a2e;
+            padding: 1px 2px;
+            border-radius: 2px;
+            font-weight: 600;
+        }
+        body.dark .search-highlight {
+            background: #854d0e;
+            color: #fef3c7;
+        }
+
+        /* ==================== 卡片入场动画 ==================== */
+        @keyframes cardSlideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0);    }
+        }
+        .animate-card-in {
+            animation: cardSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        /* ==================== 滚动条美化 ==================== */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        /* ==================== 底部安全区域适配 ==================== */
+        .safe-bottom-pad {
+            padding-bottom: calc(1rem + var(--safe-bottom));
+        }
+
+        /* ==================== PWA 启动闪屏样式 ==================== */
+        /* iOS 会在加载时使用 background-color 和 apple-touch-icon 自动生成闪屏 */
+
+        /* ==================== 屏幕/打印分离 ==================== */
+        @media screen {
+            #print-section { display: none !important; }
+        }
+
+        /* ==================== PDF 打印样式（仿 Apple 手记 · 稳健版） ==================== */
+@media print {
+    /* --- 1. 页边距 --- */
+    @page {
+        size: A4;
+        margin: 20mm;
+    }
+
+    /* --- 2. 清洗 body 上的 Tailwind 约束 --- */
+    html, body {
+        width: auto !important;
+        max-width: none !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+    .no-print, .nav-header, #search-bar, #main-content, #floating-btn, .toast-container, .modal-overlay {
+        display: none !important;
+    }
+    #print-section {
+        display: block !important;
+    }
+
+    /* --- 3. 封面 --- */
+    .pdf-cover {
+        page-break-after: always;
+        text-align: center;
+        padding-top: 70mm;
+    }
+    .pdf-big-title {
+        font-family: "PingFang SC", "PingFang HK", -apple-system, sans-serif;
+        font-size: 28px;
+        font-weight: 600;
+        color: #1d1d1f;
+        letter-spacing: 0.02em;
+    }
+
+    /* --- 4. 内容卡片 --- */
+    .pdf-card-page {
+        page-break-after: always;
+    }
+
+    /* --- 5. 页脚（position:fixed 在打印中每页重复 + counter(page) 自动递增） --- */
+    .pdf-footer {
+        position: fixed;
+        bottom: 15mm;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 13px;
+        color: #666666;
+        font-family: -apple-system, "PingFang SC", sans-serif;
+    }
+    .pdf-footer::after {
+        counter-increment: page;
+        content: "- " counter(page) " -";
+    }
+
+    /* --- 5. 标题 --- */
+    .pdf-title {
+        font-family: "PingFang SC", "PingFang HK", -apple-system, sans-serif;
+        font-size: 23px;
+        font-weight: 600;
+        color: #1d1d1f;
+        margin-top: 0;
+        margin-bottom: 12px;
+        letter-spacing: 0.01em;
+    }
+
+    /* --- 6. 日期 --- */
+    .pdf-date {
+        font-size: 13px;
+        color: #8e8e93;
+        padding-bottom: 14px;
+        margin-bottom: 26px;
+        border-bottom: 0.5px solid #d1d1d6;
+    }
+
+    /* --- 7. 正文 --- */
+    .pdf-content {
+        font-family: "PingFang SC", "PingFang HK", -apple-system, sans-serif;
+        font-size: 15px;
+        line-height: 1.85;
+        color: #2c2c2e;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        text-align: justify;
+    }
+
+    /* --- 8. 图片 --- */
+    .pdf-img {
+        max-width: 100%;
+        margin: 24px 0;
+        border-radius: 10px;
+        page-break-inside: avoid;
+    }
+}
+    </style>
+</head>
+<body class="p-0 max-w-lg mx-auto min-h-screen safe-bottom-pad">
+
+    <!-- ==================== Toast 容器 ==================== -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- ==================== 隐藏的文件选择器（用于导入备份） ==================== -->
+    <input type="file" id="import-file-input" accept=".json,application/json" class="hidden" onchange="handleImportFile(this)">
+
+    <!-- ==================== 顶部导航 ==================== -->
+    <header class="nav-header px-5 py-3">
+        <!-- 标题行 -->
+        <div class="flex justify-between items-center">
+            <h1 id="app-title" class="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] cursor-pointer select-none">手记</h1>
+            <div class="flex items-center gap-1">
+                <!-- 暗色模式切换 -->
+                <button id="dark-toggle" onclick="toggleDarkMode()"
+                        class="p-2.5 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg)] active:scale-90 transition-all duration-200"
+                        title="切换深色/浅色模式" aria-label="切换深色模式">
+                    <span id="dark-icon">🌙</span>
+                </button>
+                <!-- 搜索按钮 -->
+                <button onclick="triggerSearch()"
+                        class="p-2.5 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg)] active:scale-90 transition-all duration-200"
+                        title="搜索" aria-label="搜索">
+                    🔍
+                </button>
+            </div>
+        </div>
+        <!-- 备份按钮行 -->
+        <div class="flex items-center gap-2 mt-2">
+            <button onclick="exportBackup()"
+                    class="backup-btn btn-export flex items-center gap-1">
+                <span>📥</span> 导出备份数据
+            </button>
+            <button onclick="importBackup()"
+                    class="backup-btn btn-import flex items-center gap-1">
+                <span>📤</span> 导入备份数据
+            </button>
+        </div>
+    </header>
+
+    <!-- ==================== 搜索栏 ==================== -->
+    <div id="search-bar" class="hidden px-5 pt-2 pb-1 no-print">
+        <div class="relative">
+            <input type="text" id="search-input" oninput="handleSearch()"
+                   placeholder="输入关键词搜索手记内容..."
+                   class="w-full p-3.5 pl-11 rounded-2xl bg-[var(--bg)] border-2 border-[var(--border)] text-[var(--text-primary)]
+                          focus:outline-none focus:border-[var(--accent)] transition-all duration-200 text-sm"
+                   autocomplete="off" enterkeyhint="search">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm">🔍</span>
+        </div>
+    </div>
+
+    <!-- ==================== 主内容区 ==================== -->
+    <main id="main-content" class="px-4 pt-4 no-print"></main>
+
+    <!-- ==================== 底部浮动新建按钮 ==================== -->
+    <button id="floating-btn" onclick="handleFloatingClick()"
+            class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 w-14 h-14 bg-[var(--accent)] text-white
+                   rounded-full text-3xl font-light shadow-lg shadow-blue-500/30
+                   flex items-center justify-center no-print z-50
+                   hover:bg-[var(--accent-hover)] hover:shadow-xl hover:shadow-blue-500/40
+                   active:scale-90 transition-all duration-200"
+            style="bottom: calc(2rem + var(--safe-bottom));"
+            aria-label="新建手记">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </button>
+
+    <!-- ==================== PDF 打印区 ==================== -->
+    <div id="print-section"></div>
+
+
+    <!-- ==================== 主脚本 ==================== -->
+    <script>
+        // ======================== PWA 初始化：生成 App 图标 ========================
+        (function generateAppIcon() {
+            // 如果已有自定义 icon（通过 link 标签注入），跳过
+            if (document.querySelector('link[rel="apple-touch-icon"]')) return;
+
+            var canvas = document.createElement('canvas');
+            canvas.width = 180;
+            canvas.height = 180;
+            var ctx = canvas.getContext('2d');
+
+            // 绘制圆角矩形背景（iOS 图标标准圆角约为 22.5% 的边长）
+            var r = 40;
+            var x = 0, y = 0, w = 180, h = 180;
+
+            // 渐变背景 — 靛蓝 → 天蓝
+            var gradient = ctx.createLinearGradient(0, 0, 180, 180);
+            gradient.addColorStop(0, '#6366F1');   // 靛蓝色
+            gradient.addColorStop(1, '#3B82F6');   // 天蓝色
+
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // 绘制白色书页/手记本图案
+            // 左侧书脊
+            var bookX = 48, bookY = 30, bookW = 84, bookH = 120, bookR = 12;
+            ctx.beginPath();
+            ctx.moveTo(bookX + bookR, bookY);
+            ctx.arcTo(bookX + bookW, bookY, bookX + bookW, bookY + bookH, bookR);
+            ctx.arcTo(bookX + bookW, bookY + bookH, bookX, bookY + bookH, bookR);
+            ctx.arcTo(bookX, bookY + bookH, bookX, bookY, bookR);
+            ctx.arcTo(bookX, bookY, bookX + bookW, bookY, bookR);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+            ctx.fill();
+
+            // 封面装饰线条
+            ctx.fillStyle = '#93C5FD';
+            ctx.beginPath();
+            roundRect(ctx, 60, 48, 60, 3, 1.5);
+            ctx.fill();
+            ctx.beginPath();
+            roundRect(ctx, 60, 60, 44, 3, 1.5);
+            ctx.fill();
+            ctx.beginPath();
+            roundRect(ctx, 60, 72, 52, 3, 1.5);
+            ctx.fill();
+            ctx.beginPath();
+            roundRect(ctx, 60, 84, 36, 3, 1.5);
+            ctx.fill();
+
+            // 右下角笔尖装饰
+            ctx.fillStyle = '#6366F1';
+            ctx.beginPath();
+            ctx.moveTo(68, 112);
+            ctx.lineTo(82, 126);
+            ctx.lineTo(68, 130);
+            ctx.closePath();
+            ctx.fill();
+
+            // 小圆点装饰
+            ctx.fillStyle = 'rgba(99,102,241,0.3)';
+            ctx.beginPath();
+            ctx.arc(80, 108, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            function roundRect(ctx, x, y, w, h, r) {
+                ctx.moveTo(x + r, y);
+                ctx.arcTo(x + w, y, x + w, y + h, r);
+                ctx.arcTo(x + w, y + h, x, y + h, r);
+                ctx.arcTo(x, y + h, x, y, r);
+                ctx.arcTo(x, y, x + w, y, r);
+                ctx.closePath();
+            }
+
+            // 注入 apple-touch-icon
+            var iconLink = document.createElement('link');
+            iconLink.rel = 'apple-touch-icon';
+            iconLink.href = canvas.toDataURL('image/png');
+            iconLink.sizes = '180x180';
+            document.head.appendChild(iconLink);
+
+            // 同时生成 favicon（32x32）
+            canvas.width = 32;
+            canvas.height = 32;
+            var ctx2 = canvas.getContext('2d');
+            ctx2.fillStyle = '#6366F1';
+            ctx2.beginPath();
+            ctx2.arc(16, 16, 16, 0, Math.PI * 2);
+            ctx2.fill();
+            ctx2.fillStyle = 'white';
+            ctx2.beginPath();
+            ctx2.arc(16, 16, 8, 0, Math.PI * 2);
+            ctx2.fill();
+            ctx2.fillStyle = '#6366F1';
+            ctx2.font = 'bold 14px -apple-system, sans-serif';
+            ctx2.textAlign = 'center';
+            ctx2.textBaseline = 'middle';
+            ctx2.fillText('记', 16, 17);
+
+            var faviconLink = document.createElement('link');
+            faviconLink.rel = 'icon';
+            faviconLink.type = 'image/png';
+            faviconLink.href = canvas.toDataURL('image/png');
+            document.head.appendChild(faviconLink);
+        })();
+
+        // ======================== 检测是否在 PWA 独立模式下运行 ========================
+        var isStandalone = (function() {
+            return (window.navigator.standalone) ||
+                   (window.matchMedia('(display-mode: standalone)').matches);
+        })();
+
+        // ======================== 全局状态 ========================
+        var db = JSON.parse(localStorage.getItem('drawer_journal_db')) || { big_folders: [] };
+        var currentView = 'big';
+        var activeBigId = null;
+        var activeSmallId = null;
+        var tempImgBase64 = "";
+
+        // ======================== 初始化 ========================
+        (function init() {
+            if (localStorage.getItem('journal_dark_mode') === 'true') {
+                document.body.classList.add('dark');
+                document.getElementById('dark-icon').textContent = '☀️';
+            }
+            render();
+            // 标记 PWA 已就绪
+            document.body.setAttribute('data-ready', 'true');
+        })();
+
+        // ======================== 持久化 ========================
+        function saveDB() {
+            localStorage.setItem('drawer_journal_db', JSON.stringify(db));
+            render();
+        }
+
+        // ======================== 工具函数 ========================
+        function getFormattedDate() {
+            var days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            var now = new Date();
+            var y = now.getFullYear();
+            var m = now.getMonth() + 1;
+            var d = now.getDate();
+            var dayName = days[now.getDay()];
+            var hh = String(now.getHours()).padStart(2, '0');
+            var mm = String(now.getMinutes()).padStart(2, '0');
+            return {
+                dateStr: y + '年' + m + '月' + d + '日 ' + dayName,
+                timeStr: hh + ':' + mm
+            };
+        }
+
+        function generateId(prefix) {
+            return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        }
+
+        // ======================== Toast 提示系统 ========================
+        function showToast(message, type) {
+            type = type || 'info';
+            var container = document.getElementById('toast-container');
+            var toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(function() {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 2500);
+        }
+
+        // ======================== 自定义弹窗系统 ========================
+        function showModal(title, message, confirmText, cancelText) {
+            confirmText = confirmText || '确定';
+            return new Promise(function(resolve) {
+                var overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML =
+                    '<div class="modal-dialog">' +
+                        '<h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">' + title + '</h3>' +
+                        '<p class="text-sm text-[var(--text-secondary)] mb-6 leading-relaxed whitespace-pre-wrap">' + message + '</p>' +
+                        '<div class="flex gap-3 ' + (cancelText ? '' : 'justify-center') + '">' +
+                            (cancelText
+                                ? '<button id="modal-cancel" class="flex-1 py-2.5 px-4 rounded-xl border-2 border-[var(--border)] text-[var(--text-secondary)] font-semibold text-sm hover:bg-[var(--bg)] transition-all duration-200 active:scale-95">' + cancelText + '</button>'
+                                : '') +
+                            '<button id="modal-confirm" class="flex-1 py-2.5 px-4 rounded-xl bg-[var(--accent)] text-white font-semibold text-sm hover:bg-[var(--accent-hover)] transition-all duration-200 active:scale-95">' + confirmText + '</button>' +
+                        '</div>' +
+                    '</div>';
+                document.body.appendChild(overlay);
+
+                var cleanup = function() { if (overlay.parentNode) overlay.remove(); };
+
+                overlay.querySelector('#modal-confirm').onclick = function() { cleanup(); resolve(true); };
+                if (cancelText) {
+                    overlay.querySelector('#modal-cancel').onclick = function() { cleanup(); resolve(false); };
+                }
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) { cleanup(); resolve(false); }
+                });
+            });
+        }
+
+        function showPrompt(title, message, placeholder) {
+            placeholder = placeholder || '';
+            return new Promise(function(resolve) {
+                var overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML =
+                    '<div class="modal-dialog">' +
+                        '<h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">' + title + '</h3>' +
+                        '<p class="text-sm text-[var(--text-secondary)] mb-4">' + message + '</p>' +
+                        '<input id="modal-input" type="text" value="' + escapeHtml(placeholder) + '"' +
+                        '       class="w-full p-3 rounded-xl border-2 border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)] transition-all duration-200 mb-5"' +
+                        '       autocomplete="off" enterkeyhint="done">' +
+                        '<div class="flex gap-3">' +
+                            '<button id="modal-cancel" class="flex-1 py-2.5 rounded-xl border-2 border-[var(--border)] text-[var(--text-secondary)] font-semibold text-sm hover:bg-[var(--bg)] transition-all duration-200 active:scale-95">取消</button>' +
+                            '<button id="modal-confirm" class="flex-1 py-2.5 rounded-xl bg-[var(--accent)] text-white font-semibold text-sm hover:bg-[var(--accent-hover)] transition-all duration-200 active:scale-95">确定</button>' +
+                        '</div>' +
+                    '</div>';
+                document.body.appendChild(overlay);
+
+                var cleanup = function() { if (overlay.parentNode) overlay.remove(); };
+                var input = overlay.querySelector('#modal-input');
+
+                overlay.querySelector('#modal-confirm').onclick = function() {
+                    var val = input.value.trim();
+                    cleanup();
+                    resolve(val || null);
+                };
+                overlay.querySelector('#modal-cancel').onclick = function() { cleanup(); resolve(null); };
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) { cleanup(); resolve(null); }
+                });
+
+                setTimeout(function() { input.focus(); input.select(); }, 100);
+            });
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ======================== 暗色模式 ========================
+        function toggleDarkMode() {
+            var isDark = document.body.classList.toggle('dark');
+            localStorage.setItem('journal_dark_mode', isDark ? 'true' : 'false');
+            document.getElementById('dark-icon').textContent = isDark ? '☀️' : '🌙';
+            // 同步更新 theme-color meta
+            updateThemeColor(isDark);
+        }
+
+        function updateThemeColor(isDark) {
+            var meta = document.querySelector('meta[name="theme-color"]:not([media])');
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'theme-color';
+                document.head.appendChild(meta);
+            }
+            meta.content = isDark ? '#0f172a' : '#f0f0f5';
+        }
+
+        // ======================== 渲染引擎 ========================
+        function render() {
+            var main = document.getElementById('main-content');
+            var title = document.getElementById('app-title');
+            var floatBtn = document.getElementById('floating-btn');
+
+            floatBtn.classList.toggle('hidden', currentView !== 'cards');
+
+            switch (currentView) {
+                case 'big':   renderBigView(main, title);   break;
+                case 'small': renderSmallView(main, title); break;
+                case 'cards': renderCardsView(main, title); break;
+            }
+        }
+
+        // ---------- 大类视图（主页）----------
+        function renderBigView(main, title) {
+            title.textContent = '手记';
+            var totalCards = db.big_folders.reduce(function(sum, bf) {
+                return sum + bf.small_folders.reduce(function(s, sf) { return s + sf.cards.length; }, 0);
+            }, 0);
+
+            var html = '';
+
+            if (db.big_folders.length > 0) {
+                html +=
+                    '<div class="flex items-center gap-3 mb-5 px-1">' +
+                        '<div class="flex-1 flex items-center gap-4 text-xs text-[var(--text-tertiary)]">' +
+                            '<span>📁 ' + db.big_folders.length + ' 个大类</span>' +
+                            '<span>📝 ' + totalCards + ' 条手记</span>' +
+                        '</div>' +
+                    '</div>';
+            }
+
+            html += '<div class="grid grid-cols-2 gap-3.5">';
+
+            var hues = [210, 260, 160, 30, 340, 190, 40, 280, 130, 350];
+            db.big_folders.forEach(function(bf, index) {
+                var cardCount = bf.small_folders.reduce(function(s, sf) { return s + sf.cards.length; }, 0);
+                var hue = hues[index % hues.length];
+                html +=
+                    '<div onclick="openBig(\'' + bf.id + '\')"' +
+                    '     class="apple-card p-5 h-36 flex flex-col justify-between cursor-pointer relative overflow-hidden animate-card-in"' +
+                    '     style="animation-delay: ' + (index * 0.04) + 's; border-top: 3px solid hsl(' + hue + ', 60%, 60%);">' +
+                        '<span class="text-lg font-bold text-[var(--text-primary)] leading-tight line-clamp-2">' + escapeHtml(bf.name) + '</span>' +
+                        '<div class="flex items-center justify-between">' +
+                            '<span class="text-xs text-[var(--text-tertiary)]">' +
+                                bf.small_folders.length + ' 分类 · ' + cardCount + ' 条' +
+                            '</span>' +
+                        '</div>' +
+                        '<button onclick="event.stopPropagation(); renameBigFolder(\'' + bf.id + '\')"' +
+                        '        class="absolute top-2.5 right-14 w-7 h-7 flex items-center justify-center' +
+                        '               rounded-full text-[var(--text-tertiary)] hover:text-blue-500 hover:bg-blue-50' +
+                        '               dark:hover:bg-blue-900/20 transition-all duration-150 text-sm opacity-60 hover:opacity-100"' +
+                        '        aria-label="重命名大类">' +
+                        '    ✏️' +
+                        '</button>' +
+                        '<button onclick="event.stopPropagation(); deleteBig(\'' + bf.id + '\')"' +
+                        '        class="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center' +
+                        '               rounded-full text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-red-50' +
+                        '               dark:hover:bg-red-900/20 transition-all duration-150 text-sm opacity-60 hover:opacity-100"' +
+                        '        aria-label="删除大类">' +
+                        '    ✕' +
+                        '</button>' +
+                    '</div>';
+            });
+
+            html +=
+                '<div onclick="addBig()"' +
+                '     class="add-placeholder h-36 flex flex-col items-center justify-center cursor-pointer text-[var(--text-tertiary)] transition-all duration-200">' +
+                    '<span class="text-3xl font-light mb-1.5">+</span>' +
+                    '<span class="text-xs">新建大类</span>' +
+                '</div>';
+
+            html += '</div>';
+
+            if (db.big_folders.length === 0) {
+                html =
+                    '<div class="flex flex-col items-center justify-center py-20 text-center">' +
+                        '<div class="text-6xl mb-5 opacity-60">📔</div>' +
+                        '<p class="text-[var(--text-secondary)] text-sm mb-6 leading-relaxed">' +
+                            '还没有手记<br>点击下方卡片创建你的第一个分类吧' +
+                        '</p>' +
+                        '<button onclick="addBig()"' +
+                        '        class="px-6 py-3 bg-[var(--accent)] text-white rounded-2xl font-semibold text-sm' +
+                        '               hover:bg-[var(--accent-hover)] active:scale-95 transition-all duration-200 shadow-lg shadow-blue-500/25">' +
+                        '    开始记录' +
+                        '</button>' +
+                    '</div>';
+            }
+
+            main.innerHTML = html;
+        }
+
+        // ---------- 小分类视图 ----------
+        function renderSmallView(main, title) {
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            if (!bf) { currentView = 'big'; render(); return; }
+
+            title.textContent = bf.name;
+
+            var html =
+                '<button onclick="currentView=\'big\'; render();"' +
+                '        class="inline-flex items-center gap-1.5 mb-4 text-[var(--accent)] font-semibold text-sm' +
+                '               hover:opacity-80 transition-opacity duration-200">' +
+                    '<span>←</span> 返回大类' +
+                '</button>' +
+
+                '<!-- PDF 导出面板 -->' +
+                '<div class="apple-card p-4 mb-5">' +
+                    '<div class="flex justify-between items-center mb-3">' +
+                        '<h3 class="font-bold text-[var(--text-primary)] text-sm">🖨️ PDF 导出</h3>' +
+                        '<button onclick="exportSelectedPDF()"' +
+                        '        class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold' +
+                        '               hover:bg-emerald-700 active:scale-95 transition-all duration-200 shadow-md shadow-emerald-600/20">' +
+                        '    生成合并PDF' +
+                        '</button>' +
+                    '</div>' +
+                    '<p class="text-xs text-[var(--text-tertiary)] mb-2">勾选要导出的分类，一卡一页，生成精美PDF文档：</p>' +
+                    '<div class="space-y-1.5 max-h-40 overflow-y-auto">';
+
+            bf.small_folders.forEach(function(sf) {
+                html +=
+                    '<label class="flex items-center gap-3 p-2.5 hover:bg-[var(--bg)] rounded-xl cursor-pointer transition-all duration-150 active:scale-[0.98]">' +
+                        '<input type="checkbox" name="pdf-select" value="' + sf.id + '"' +
+                        '       class="w-4 h-4 rounded accent-[var(--accent)]">' +
+                        '<span class="text-[var(--text-primary)] text-sm flex-1 font-medium">📁 ' + escapeHtml(sf.name) + '</span>' +
+                        '<span class="text-xs text-[var(--text-tertiary)] bg-[var(--bg)] px-2 py-0.5 rounded-full">' + sf.cards.length + '</span>' +
+                    '</label>';
+            });
+
+            html += '</div></div><div class="space-y-2.5">';
+
+            bf.small_folders.forEach(function(sf, index) {
+                html +=
+                    '<div onclick="openSmall(\'' + sf.id + '\')"' +
+                    '     class="apple-card p-4 flex justify-between items-center cursor-pointer animate-card-in"' +
+                    '     style="animation-delay: ' + (index * 0.03) + 's">' +
+                        '<div class="flex items-center gap-3">' +
+                            '<span class="text-xl">📁</span>' +
+                            '<div>' +
+                                '<span class="font-semibold text-[var(--text-primary)]">' + escapeHtml(sf.name) + '</span>' +
+                                '<p class="text-xs text-[var(--text-tertiary)] mt-0.5">' + sf.cards.length + ' 张卡片</p>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="flex items-center gap-1.5">' +
+                            '<button onclick="event.stopPropagation(); renameSmallFolder(\'' + activeBigId + '\', \'' + sf.id + '\')"' +
+                            '        class="w-7 h-7 flex items-center justify-center rounded-full' +
+                            '               text-[var(--text-tertiary)] hover:text-blue-500 hover:bg-blue-50' +
+                            '               dark:hover:bg-blue-900/20 transition-all duration-150 text-sm opacity-50 hover:opacity-100"' +
+                            '        aria-label="重命名小分类">' +
+                            '    ✏️' +
+                            '</button>' +
+                            '<button onclick="event.stopPropagation(); deleteSmall(\'' + sf.id + '\')"' +
+                            '        class="w-7 h-7 flex items-center justify-center rounded-full' +
+                            '               text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-red-50' +
+                            '               dark:hover:bg-red-900/20 transition-all duration-150 text-sm opacity-50 hover:opacity-100"' +
+                            '        aria-label="删除小分类">' +
+                            '    ✕' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>';
+            });
+
+            html +=
+                '<button onclick="addSmall()"' +
+                '        class="w-full add-placeholder p-4 text-center text-sm font-medium mt-2 cursor-pointer">' +
+                '    + 新建小分类' +
+                '</button>' +
+                '</div>';
+
+            main.innerHTML = html;
+        }
+
+        // ---------- 卡片视图 ----------
+        function renderCardsView(main, title) {
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            if (!bf) { currentView = 'big'; render(); return; }
+            var sf = bf.small_folders.find(function(s) { return s.id === activeSmallId; });
+            if (!sf) { currentView = 'small'; render(); return; }
+
+            title.textContent = sf.name;
+
+            var html =
+                '<button onclick="currentView=\'small\'; render();"' +
+                '        class="inline-flex items-center gap-1.5 mb-4 text-[var(--accent)] font-semibold text-sm' +
+                '               hover:opacity-80 transition-opacity duration-200">' +
+                    '<span>←</span> 返回 ' + escapeHtml(bf.name) +
+                '</button>' +
+                '<div class="space-y-4">';
+
+            if (sf.cards.length === 0) {
+                html +=
+                    '<div class="flex flex-col items-center justify-center py-16 text-center">' +
+                        '<div class="text-5xl mb-4 opacity-50">✍️</div>' +
+                        '<p class="text-[var(--text-secondary)] text-sm mb-1">这里还空空如也</p>' +
+                        '<p class="text-[var(--text-tertiary)] text-xs">' +
+                            '点击下方 <span class="text-[var(--accent)]">+</span> 开始记录吧' +
+                        '</p>' +
+                    '</div>';
+            }
+
+            sf.cards.slice().reverse().forEach(function(card, index) {
+                var displayContent = escapeHtml(card.content)
+                    .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener" class="text-[var(--accent)] underline break-all">$1</a>');
+
+                html +=
+                    '<div class="apple-card p-5 animate-card-in" style="animation-delay: ' + (index * 0.04) + 's">' +
+                        '<div class="text-xs font-bold text-[var(--accent)] mb-2 tracking-wide uppercase">' + escapeHtml(sf.name) + '</div>' +
+                        '<div class="text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed text-[15px]">' + displayContent + '</div>' +
+                        (card.img ? '<img src="' + card.img + '" class="mt-4 rounded-xl max-h-56 w-full object-cover shadow-sm" loading="lazy">' : '') +
+                        '<div class="mt-5 pt-3 flex justify-between items-center text-xs border-t border-[var(--border)]">' +
+                            '<span class="text-[var(--text-tertiary)]">' + card.date + ' ' + card.time + '</span>' +
+                            '<div class="flex gap-2 no-print">' +
+                                '<button onclick="editCard(\'' + card.id + '\')"' +
+                                '        class="px-2.5 py-1 rounded-lg text-[var(--accent)] hover:bg-[var(--accent-light)]' +
+                                '               font-medium transition-all duration-150 active:scale-95">编辑</button>' +
+                                '<button onclick="moveCard(\'' + card.id + '\')"' +
+                                '        class="px-2.5 py-1 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]' +
+                                '               transition-all duration-150 active:scale-95">搬家</button>' +
+                                '<button onclick="deleteCard(\'' + card.id + '\')"' +
+                                '        class="px-2.5 py-1 rounded-lg text-[var(--danger)] hover:bg-red-50' +
+                                '               dark:hover:bg-red-900/20 transition-all duration-150 active:scale-95">删除</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+            });
+
+            html += '</div>';
+            main.innerHTML = html;
+        }
+
+        // ======================== 大类操作 ========================
+        async function addBig() {
+            var name = await showPrompt('新建大类', '给这个分类起个名字吧：', '');
+            if (!name) return;
+            db.big_folders.push({ id: generateId('b_'), name: name, small_folders: [] });
+            saveDB();
+            showToast('已创建「' + name + '」', 'success');
+        }
+
+        async function deleteBig(id) {
+            var bf = db.big_folders.find(function(b) { return b.id === id; });
+            var totalCards = bf.small_folders.reduce(function(s, sf) { return s + sf.cards.length; }, 0);
+            var confirmed = await showModal(
+                '删除大类',
+                '确定删除「' + bf.name + '」吗？\n' + bf.small_folders.length + ' 个小分类、' + totalCards + ' 张卡片将被永久移除。',
+                '确认删除', '取消'
+            );
+            if (confirmed) {
+                db.big_folders = db.big_folders.filter(function(b) { return b.id !== id; });
+                saveDB();
+                showToast('已删除「' + bf.name + '」', 'error');
+            }
+        }
+
+        // ======================== 小分类操作 ========================
+        async function addSmall() {
+            var name = await showPrompt('新建小分类', '给这个小分类起个名字：', '');
+            if (!name) return;
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            bf.small_folders.push({ id: generateId('s_'), name: name, cards: [] });
+            saveDB();
+            showToast('已创建「' + name + '」', 'success');
+        }
+
+        async function deleteSmall(id) {
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            var sf = bf.small_folders.find(function(s) { return s.id === id; });
+            var confirmed = await showModal(
+                '删除小分类',
+                '确定删除「' + sf.name + '」吗？\n其中的 ' + sf.cards.length + ' 张卡片将全部消失。',
+                '确认删除', '取消'
+            );
+            if (confirmed) {
+                bf.small_folders = bf.small_folders.filter(function(s) { return s.id !== id; });
+                saveDB();
+                showToast('已删除「' + sf.name + '」', 'error');
+            }
+        }
+
+        // ======================== 导航 ========================
+        function openBig(id)   { activeBigId = id; currentView = 'small'; render(); window.scrollTo(0, 0); }
+        function openSmall(id) { activeSmallId = id; currentView = 'cards'; render(); window.scrollTo(0, 0); }
+
+        // ======================== 新建卡片（浮动按钮） ========================
+        function handleFloatingClick() {
+            var timeInfo = getFormattedDate();
+            var html =
+                '<button onclick="saveNewCard()"' +
+                '        class="inline-flex items-center gap-1.5 mb-4 text-[var(--accent)] font-semibold text-sm' +
+                '               hover:opacity-80 transition-opacity duration-200">' +
+                    '<span>←</span> 返回' +
+                '</button>' +
+                '<div class="apple-card p-5 space-y-4">' +
+                    '<div class="flex items-center justify-between">' +
+                        '<span class="text-sm font-bold text-[var(--text-tertiary)]">' + timeInfo.dateStr + '</span>' +
+                        '<span class="text-xs text-[var(--text-tertiary)]">' + timeInfo.timeStr + '</span>' +
+                    '</div>' +
+                    '<textarea id="card-text" rows="7"' +
+                    '          placeholder="记录此刻的想法..."' +
+                    '          class="edit-textarea w-full p-3 text-[15px] resize-none"></textarea>' +
+                    '<div class="border-t border-[var(--border)] pt-3 flex flex-col gap-2">' +
+                        '<label class="text-xs text-[var(--text-secondary)] cursor-pointer flex items-center gap-2 hover:text-[var(--accent)] transition-colors duration-150">' +
+                            '<span>📸</span> 添加照片' +
+                            '<input type="file" id="card-img-file" accept="image/*" class="hidden" onchange="previewImage(this)">' +
+                            '<span id="img-status" class="text-[var(--accent)] font-medium">点击选择</span>' +
+                        '</label>' +
+                        '<div id="img-preview-area" class="hidden">' +
+                            '<img id="img-view" class="max-h-36 rounded-xl shadow-sm">' +
+                            '<button onclick="removeImage()" class="mt-1 text-xs text-[var(--danger)] hover:underline">移除图片</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button onclick="saveNewCard()"' +
+                    '        class="w-full bg-[var(--accent)] text-white p-3.5 rounded-2xl font-bold text-sm' +
+                    '               hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all duration-200' +
+                    '               shadow-lg shadow-blue-500/20">' +
+                    '    保存手记' +
+                    '</button>' +
+                '</div>';
+            document.getElementById('main-content').innerHTML = html;
+            document.getElementById('floating-btn').classList.add('hidden');
+            setTimeout(function() {
+                var ta = document.getElementById('card-text');
+                if (ta) ta.focus();
+            }, 150);
+        }
+
+        function previewImage(input) {
+            var file = input.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                showToast('图片较大，导出PDF时文件可能很大', 'info');
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                tempImgBase64 = e.target.result;
+                document.getElementById('img-status').textContent = '已选择 1 张';
+                document.getElementById('img-view').src = tempImgBase64;
+                document.getElementById('img-preview-area').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            tempImgBase64 = "";
+            document.getElementById('img-status').textContent = '点击选择';
+            document.getElementById('img-preview-area').classList.add('hidden');
+            var fileInput = document.getElementById('card-img-file');
+            if (fileInput) fileInput.value = '';
+        }
+
+        function saveNewCard() {
+            var content = document.getElementById('card-text').value.trim();
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            var sf = bf.small_folders.find(function(s) { return s.id === activeSmallId; });
+            var timeInfo = getFormattedDate();
+            sf.cards.push({
+                id: generateId('c_'),
+                content: content,
+                img: tempImgBase64,
+                date: timeInfo.dateStr,
+                time: timeInfo.timeStr
+            });
+            tempImgBase64 = "";
+            currentView = 'cards';
+            saveDB();
+            showToast('手记已保存 ✨', 'success');
+        }
+
+        // ======================== 编辑卡片 ========================
+        function editCard(cardId) {
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            var sf = bf.small_folders.find(function(s) { return s.id === activeSmallId; });
+            var card = sf.cards.find(function(c) { return c.id === cardId; });
+            if (!card) return;
+
+            var editImgBase64 = card.img || '';
+
+            var html =
+                '<button onclick="saveEditCard(\'' + cardId + '\')"' +
+                '        class="inline-flex items-center gap-1.5 mb-4 text-[var(--accent)] font-semibold text-sm' +
+                '               hover:opacity-80 transition-opacity duration-200">' +
+                    '<span>←</span> 返回' +
+                '</button>' +
+                '<div class="apple-card p-5 space-y-4">' +
+                    '<div class="flex items-center justify-between">' +
+                        '<span class="text-sm font-bold text-[var(--accent)]">✏️ 编辑手记</span>' +
+                        '<span class="text-xs text-[var(--text-tertiary)]">' + card.date + ' ' + card.time + '</span>' +
+                    '</div>' +
+                    '<textarea id="edit-card-text" rows="7"' +
+                    '          class="edit-textarea w-full p-3 text-[15px] resize-none">' + escapeHtml(card.content) + '</textarea>' +
+                    '<div class="border-t border-[var(--border)] pt-3 flex flex-col gap-2">' +
+                        '<label class="text-xs text-[var(--text-secondary)] cursor-pointer flex items-center gap-2 hover:text-[var(--accent)] transition-colors duration-150">' +
+                            '<span>📸</span> 更换照片' +
+                            '<input type="file" id="edit-card-img-file" accept="image/*" class="hidden" onchange="editPreviewImage(this)">' +
+                            '<span id="edit-img-status" class="text-[var(--accent)] font-medium">' + (editImgBase64 ? '已有一张照片' : '点击选择') + '</span>' +
+                        '</label>' +
+                        '<div id="edit-img-preview-area" class="' + (editImgBase64 ? '' : 'hidden') + '">' +
+                            '<img id="edit-img-view" class="max-h-36 rounded-xl shadow-sm" src="' + (editImgBase64 || '') + '">' +
+                            '<button onclick="editRemoveImage()" class="mt-1 text-xs text-[var(--danger)] hover:underline">移除图片</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button onclick="saveEditCard(\'' + cardId + '\')"' +
+                    '        class="w-full bg-[var(--accent)] text-white p-3.5 rounded-2xl font-bold text-sm' +
+                    '               hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all duration-200' +
+                    '               shadow-lg shadow-blue-500/20">' +
+                    '    保存修改' +
+                    '</button>' +
+                '</div>';
+            document.getElementById('main-content').innerHTML = html;
+            document.getElementById('floating-btn').classList.add('hidden');
+
+            tempImgBase64 = editImgBase64;
+
+            setTimeout(function() {
+                var ta = document.getElementById('edit-card-text');
+                if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+            }, 150);
+        }
+
+        function editPreviewImage(input) {
+            var file = input.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                showToast('图片较大，导出PDF时文件可能很大', 'info');
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                tempImgBase64 = e.target.result;
+                document.getElementById('edit-img-status').textContent = '已选择新照片';
+                var imgView = document.getElementById('edit-img-view');
+                imgView.src = tempImgBase64;
+                document.getElementById('edit-img-preview-area').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function editRemoveImage() {
+            tempImgBase64 = "";
+            document.getElementById('edit-img-status').textContent = '点击选择';
+            document.getElementById('edit-img-preview-area').classList.add('hidden');
+            var fileInput = document.getElementById('edit-card-img-file');
+            if (fileInput) fileInput.value = '';
+        }
+
+        function saveEditCard(cardId) {
+            var content = document.getElementById('edit-card-text').value.trim();
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            var sf = bf.small_folders.find(function(s) { return s.id === activeSmallId; });
+            var card = sf.cards.find(function(c) { return c.id === cardId; });
+            if (!card) return;
+            card.content = content;
+            card.img = tempImgBase64;
+            tempImgBase64 = "";
+            currentView = 'cards';
+            saveDB();
+            showToast('手记已更新 ✨', 'success');
+        }
+
+        // ======================== 删除卡片 ========================
+        async function deleteCard(cardId) {
+            var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+            var sf = bf.small_folders.find(function(s) { return s.id === activeSmallId; });
+            var card = sf.cards.find(function(c) { return c.id === cardId; });
+            var confirmed = await showModal(
+                '删除手记',
+                '确定删除这条手记吗？\n\n预览：' + card.content.slice(0, 80) + (card.content.length > 80 ? '...' : ''),
+                '确认删除', '取消'
+            );
+            if (confirmed) {
+                sf.cards = sf.cards.filter(function(c) { return c.id !== cardId; });
+                saveDB();
+                showToast('手记已删除', 'error');
+            }
+        }
+
+        // ======================== 搬家 ========================
+        function moveCard(cardId) {
+            var destinations = [];
+            // 收集所有目标文件夹，排除当前所在的小分类
+            db.big_folders.forEach(function(bf) {
+                bf.small_folders.forEach(function(sf) {
+                    if (sf.id !== activeSmallId) {
+                        destinations.push({ label: bf.name + ' ➔ ' + sf.name, bfId: bf.id, sfId: sf.id });
+                    }
+                });
+            });
+
+            if (destinations.length === 0) {
+                showToast('没有其他可用的文件夹', 'info');
+                return;
+            }
+
+            // 使用自定义弹窗展示可选目标列表（替代原生 prompt，符合 iOS App 体验）
+            var overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+
+            var listHtml = '';
+            destinations.forEach(function(d, i) {
+                listHtml +=
+                    '<button data-idx="' + i + '"' +
+                    '        class="move-option w-full text-left p-3 rounded-xl text-[var(--text-primary)] text-sm font-medium' +
+                    '               hover:bg-[var(--bg)] active:scale-[0.98] transition-all duration-150 border border-transparent hover:border-[var(--border)] mb-1.5">' +
+                    '    📁 ' + escapeHtml(d.label) +
+                    '</button>';
+            });
+
+            overlay.innerHTML =
+                '<div class="modal-dialog">' +
+                    '<h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">📦 搬家到...</h3>' +
+                    '<p class="text-xs text-[var(--text-tertiary)] mb-4">选择目标文件夹，手记将被移动过去</p>' +
+                    '<div class="max-h-56 overflow-y-auto mb-2">' + listHtml + '</div>' +
+                    '<button id="move-cancel" class="w-full py-2.5 rounded-xl border-2 border-[var(--border)] text-[var(--text-secondary)] font-semibold text-sm hover:bg-[var(--bg)] transition-all duration-200 active:scale-95 mt-2">取消</button>' +
+                '</div>';
+
+            document.body.appendChild(overlay);
+
+            var cleanup = function() { if (overlay.parentNode) overlay.remove(); };
+
+            // 选项点击
+            overlay.querySelectorAll('.move-option').forEach(function(btn) {
+                btn.onclick = function() {
+                    var idx = parseInt(btn.getAttribute('data-idx'));
+                    var dest = destinations[idx];
+                    var currentBf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+                    var currentSf = currentBf.small_folders.find(function(s) { return s.id === activeSmallId; });
+                    var theCard = currentSf.cards.find(function(c) { return c.id === cardId; });
+                    currentSf.cards = currentSf.cards.filter(function(c) { return c.id !== cardId; });
+                    var targetBf = db.big_folders.find(function(b) { return b.id === dest.bfId; });
+                    var targetSf = targetBf.small_folders.find(function(s) { return s.id === dest.sfId; });
+                    targetSf.cards.push(theCard);
+                    showToast('已搬家至：' + dest.label, 'success');
+                    cleanup();
+                    saveDB();
+                };
+            });
+
+            // 取消
+            overlay.querySelector('#move-cancel').onclick = function() { cleanup(); };
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) { cleanup(); }
+            });
+        }
+
+        // ======================== 搜索 ========================
+        function triggerSearch() {
+            var bar = document.getElementById('search-bar');
+            bar.classList.toggle('hidden');
+            if (!bar.classList.contains('hidden')) {
+                document.getElementById('search-input').focus();
+            } else {
+                document.getElementById('search-input').value = '';
+                if (currentView === 'search') { currentView = 'big'; render(); }
+            }
+        }
+
+        function handleSearch() {
+            var kw = document.getElementById('search-input').value.trim().toLowerCase();
+            var main = document.getElementById('main-content');
+            var floatBtn = document.getElementById('floating-btn');
+            floatBtn.classList.add('hidden');
+
+            if (!kw) { currentView = 'big'; render(); return; }
+
+            currentView = 'search';
+            var html =
+                '<button onclick="document.getElementById(\'search-bar\').classList.add(\'hidden\'); document.getElementById(\'search-input\').value=\'\'; currentView=\'big\'; render();"' +
+                '        class="inline-flex items-center gap-1.5 mb-4 text-[var(--accent)] font-semibold text-sm' +
+                '               hover:opacity-80 transition-opacity duration-200">' +
+                    '<span>←</span> 退出搜索' +
+                '</button>' +
+                '<div class="space-y-3">';
+
+            var results = [];
+            db.big_folders.forEach(function(bf) {
+                bf.small_folders.forEach(function(sf) {
+                    sf.cards.forEach(function(card) {
+                        if (card.content.toLowerCase().indexOf(kw) !== -1) {
+                            results.push({ bf: bf, sf: sf, card: card });
+                        }
+                    });
+                });
+            });
+
+            if (results.length === 0) {
+                html +=
+                    '<div class="flex flex-col items-center justify-center py-16 text-center">' +
+                        '<div class="text-5xl mb-4 opacity-40">🔍</div>' +
+                        '<p class="text-[var(--text-secondary)] text-sm">没有找到包含「' + escapeHtml(kw) + '」的内容</p>' +
+                    '</div>';
+            } else {
+                html += '<p class="text-xs text-[var(--text-tertiary)] mb-3">找到 ' + results.length + ' 条结果</p>';
+                var escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                var kwRegex = new RegExp('(' + escapedKw + ')', 'gi');
+                results.forEach(function(item, index) {
+                    var highlighted = escapeHtml(item.card.content).replace(kwRegex, '<mark class="search-highlight">$1</mark>');
+                    html +=
+                        '<div class="apple-card p-4 animate-card-in" style="animation-delay: ' + (index * 0.03) + 's">' +
+                            '<div class="text-xs font-bold text-[var(--accent)] mb-2">' + escapeHtml(item.bf.name) + ' ➔ ' + escapeHtml(item.sf.name) + '</div>' +
+                            '<div class="text-[var(--text-primary)] text-sm whitespace-pre-wrap leading-relaxed">' + highlighted + '</div>' +
+                            '<div class="mt-3 pt-2 border-t border-[var(--border)] text-xs text-[var(--text-tertiary)]">' + item.card.date + ' ' + item.card.time + '</div>' +
+                        '</div>';
+                });
+            }
+
+            html += '</div>';
+            main.innerHTML = html;
+        }
+
+        // ======================== PDF 导出（html2pdf.js 方案：绕过手机打印系统） ========================
+        function exportSelectedPDF() {
+    var checkboxes = document.querySelectorAll('input[name="pdf-select"]:checked');
+    if (checkboxes.length === 0) {
+        showToast('请选择至少一个分类进行导出', 'info');
+        return;
+    }
+
+    var bf = db.big_folders.find(function(b) { return b.id === activeBigId; });
+    if (!bf) return;
+
+    // 1. 收集选中分类中的所有卡片
+    var totalCardsToPrint = [];
+    checkboxes.forEach(function(cb) {
+        var sf = bf.small_folders.find(function(s) { return s.id === cb.value; });
+        if (!sf) return;
+        sf.cards.slice().reverse().forEach(function(card) {
+            totalCardsToPrint.push({ sfName: sf.name, card: card });
+        });
+    });
+
+    if (totalCardsToPrint.length === 0) {
+        showToast('所选分类中没有手记卡片', 'info');
+        return;
+    }
+
+    // 2. 如果 html2pdf 未加载（离线/网络问题），回退到浏览器原生打印
+    if (typeof html2pdf === 'undefined') {
+        showToast('PDF 组件未加载，使用浏览器打印（手机端可能有页脚网址）', 'info');
+        fallbackToWindowPrint(bf, totalCardsToPrint);
+        return;
+    }
+
+    showToast('正在生成 PDF，请稍候...', 'info');
+
+    // 3. 构建纯屏幕渲染的 HTML（html2pdf 通过 html2canvas 截屏，必须用内联样式）
+    var printHtml = buildPdfHtml(bf, totalCardsToPrint);
+
+    // 4. 创建全屏生成容器（html2canvas 要求元素可见可渲染，故用全屏白色遮罩）
+    var container = document.createElement('div');
+    container.id = 'html2pdf-container';
+    // 外层：全屏白色遮罩 + 居中滚动
+    container.style.cssText =
+        'position:fixed;left:0;top:0;width:100vw;height:100vh;' +
+        'overflow-y:auto;overflow-x:hidden;' +
+        'background:#f5f5f5;color:#1d1d1f;' +
+        'z-index:2147483647;' +    // 最大层级，盖住一切
+        'font-family:"PingFang SC","PingFang HK",-apple-system,"Microsoft YaHei",sans-serif;' +
+        'display:flex;flex-direction:column;align-items:center;';
+
+    // 状态提示条
+    var statusBar = document.createElement('div');
+    statusBar.id = 'html2pdf-status';
+    statusBar.style.cssText =
+        'position:sticky;top:0;z-index:1;width:100%;' +
+        'padding:14px 20px;text-align:center;' +
+        'background:rgba(59,130,246,0.95);color:#fff;' +
+        'font-size:14px;font-weight:600;letter-spacing:0.05em;' +
+        'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);';
+    statusBar.textContent = '📄 正在生成 PDF...';
+    container.appendChild(statusBar);
+
+    // 内容包裹器：模拟 A4 纸（794px ≈ 210mm @ 96dpi）
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = printHtml;
+    wrapper.style.cssText =
+        'width:794px;min-height:1123px;' +     // A4: 210×297mm → 794×1123px
+        'background:#ffffff;' +
+        'margin:20px auto 60px;' +
+        'box-shadow:0 4px 24px rgba(0,0,0,0.12);' +
+        'flex-shrink:0;';
+    container.appendChild(wrapper);
+
+    document.body.appendChild(container);
+
+    // 5. 等图片加载 + 布局稳定后再生成 PDF
+    var startTime = Date.now();
+    var maxWait = 8000; // 最多等 8 秒
+
+    function tryGenerate() {
+        // 检查 A4 包裹器内所有图片是否加载完毕
+        var images = wrapper.querySelectorAll('img');
+        var allLoaded = true;
+        images.forEach(function(img) {
+            if (!img.complete || img.naturalWidth === 0) {
+                allLoaded = false;
+            }
+        });
+
+        if (!allLoaded && (Date.now() - startTime) < maxWait) {
+            setTimeout(tryGenerate, 200);
+            return;
+        }
+
+        statusBar.textContent = '📄 正在渲染页面...';
+
+        // 6. html2pdf 配置（只对 A4 包裹器截图，不含全屏遮罩和状态栏）
+        var opt = {
+            margin: [20, 18, 20, 18],          // 上右下左，单位 mm
+            filename: (bf.name || '手记') + '.pdf',
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: {
+                scale: 2,                       // 2x 高清渲染
+                useCORS: true,
+                logging: false,
+                letterRendering: true,
+                allowTaint: true
+            },
+            jsPDF: {
+                unit: 'mm',
+                format: 'a4',
+                orientation: 'portrait'
+            },
+            pagebreak: {
+                mode: ['css', 'legacy']         // css: 识别 page-break-after; legacy: 备选
+            }
+        };
+
+        html2pdf().set(opt).from(wrapper).save()
+            .then(function() {
+                statusBar.textContent = '✅ PDF 已生成，即将下载...';
+                statusBar.style.background = 'rgba(16,185,129,0.95)';
+                setTimeout(cleanup, 600);
+                showToast('✅ PDF 导出成功！共 ' + totalCardsToPrint.length + ' 条手记', 'success');
+            })
+            .catch(function(err) {
+                cleanup();
+                console.error('html2pdf 生成失败：', err);
+                showToast('❌ PDF 生成失败，尝试浏览器打印...', 'error');
+                fallbackToWindowPrint(bf, totalCardsToPrint);
+            });
+    }
+
+    function cleanup() {
+        if (container.parentNode) {
+            container.parentNode.removeChild(container);
+        }
+    }
+
+    // 启动生成（给 150ms 让浏览器完成布局）
+    setTimeout(tryGenerate, 150);
+}
+
+// ======================== 构建可用于 html2pdf 截屏的 HTML ========================
+function buildPdfHtml(bf, cards) {
+    var html = '';
+
+    // --- 封面 ---
+    html +=
+        '<div style="page-break-after:always;text-align:center;padding:180px 40px 60px;' +
+                    'background:#ffffff;min-height:100%;box-sizing:border-box;">' +
+            '<div style="width:80px;height:4px;background:#3b82f6;border-radius:2px;margin:0 auto 36px;"></div>' +
+            '<div style="font-size:30px;font-weight:700;color:#1d1d1f;letter-spacing:0.03em;' +
+                        'line-height:1.3;">' + escapeHtml(bf.name) + '</div>' +
+            '<div style="margin-top:48px;font-size:13px;color:#9ca3af;letter-spacing:0.35em;">' +
+                '生活抽屉手记 · ' + new Date().getFullYear() +
+            '</div>' +
+            '<div style="margin-top:16px;font-size:11px;color:#c4c4c8;">' +
+                '共 ' + cards.length + ' 条记录' +
+            '</div>' +
+        '</div>';
+
+    // --- 卡片正文（一卡一页） ---
+    cards.forEach(function(item, idx) {
+        var card = item.card;
+        var sfName = item.sfName;
+
+        // 日期格式化
+        var pdfDate = card.date;
+        if (pdfDate.indexOf('年') === -1) {
+            pdfDate = new Date().getFullYear() + '年' + pdfDate;
+        }
+        if (card.time) {
+            pdfDate = pdfDate + '  ' + card.time;
+        }
+
+        var isLast = (idx === cards.length - 1);
+        var pageBreak = isLast ? '' : 'page-break-after:always;';
+
+        html +=
+            '<div style="padding:10px 0 20px;' + pageBreak + 'background:#ffffff;">' +
+                // ── 日期线 ──
+                '<div style="font-size:13px;color:#8e8e93;padding-bottom:14px;margin-bottom:28px;' +
+                            'border-bottom:0.5px solid #d1d1d6;letter-spacing:0.02em;">' +
+                    pdfDate +
+                '</div>' +
+                // ── 分类标题 ──
+                '<div style="font-size:22px;font-weight:600;color:#1d1d1f;margin-bottom:14px;' +
+                            'letter-spacing:0.02em;line-height:1.3;">' +
+                    escapeHtml(sfName) +
+                '</div>' +
+                // ── 正文 ──
+                '<div style="font-size:15px;line-height:1.9;color:#2c2c2e;white-space:pre-wrap;' +
+                            'word-wrap:break-word;text-align:justify;">' +
+                    escapeHtml(card.content) +
+                '</div>' +
+                // ── 图片 ──
+                (card.img ?
+                    '<img src="' + card.img + '" ' +
+                         'style="display:block;max-width:100%;max-height:420px;margin:24px auto 0;' +
+                                'border-radius:12px;page-break-inside:avoid;" ' +
+                         'crossorigin="anonymous">'
+                    : '') +
+                // ── 页脚页码 ──
+                '<div style="text-align:center;font-size:12px;color:#b0b0b8;' +
+                            'margin-top:60px;padding-top:16px;letter-spacing:0.05em;">' +
+                    '— ' + (idx + 2) + ' —' +
+                '</div>' +
+            '</div>';
+    });
+
+    return html;
+}
+
+// ======================== 回退方案：浏览器原生打印（桌面端可用） ========================
+function fallbackToWindowPrint(bf, cards) {
+    var printSection = document.getElementById('print-section');
+    var printHtml = '';
+
+    // 封面
+    printHtml +=
+        '<div style="page-break-after:always;text-align:center;padding-top:200px;">' +
+            '<div style="width:80px;height:4px;background:#3b82f6;border-radius:2px;margin:0 auto 32px;"></div>' +
+            '<div style="font-size:28px;font-weight:600;color:#1d1d1f;letter-spacing:0.02em;">' + escapeHtml(bf.name) + '</div>' +
+            '<div style="margin-top:40px;font-size:12px;color:#9ca3af;letter-spacing:0.3em;">生活抽屉手记 · ' + new Date().getFullYear() + '</div>' +
+        '</div>';
+
+    // 固定页脚
+    printHtml += '<div class="pdf-footer"></div>';
+
+    // 内容
+    cards.forEach(function(item, idx) {
+        var card = item.card;
+        var pdfDate = card.date;
+        if (pdfDate.indexOf('年') === -1) {
+            pdfDate = new Date().getFullYear() + '年' + pdfDate;
+        }
+        if (card.time) {
+            pdfDate = pdfDate + ' ' + card.time;
+        }
+        var isLast = (idx === cards.length - 1);
+        var pb = isLast ? '' : 'page-break-after:always;';
+
+        printHtml +=
+            '<div style="' + pb + '">' +
+                '<div class="pdf-date">' + pdfDate + '</div>' +
+                '<div class="pdf-title">' + escapeHtml(item.sfName) + '</div>' +
+                '<div class="pdf-content">' + escapeHtml(card.content) + '</div>' +
+                (card.img ? '<img src="' + card.img + '" class="pdf-img">' : '') +
+            '</div>';
+    });
+
+    printSection.innerHTML = printHtml;
+
+    setTimeout(function() {
+        window.print();
+        window.addEventListener('afterprint', function cleanup() {
+            printSection.innerHTML = '';
+            window.removeEventListener('afterprint', cleanup);
+        });
+    }, 100);
+
+    showToast('📄 请在打印对话框中选择「另存为PDF」', 'info');
+}
+
+        // ======================== 🔥 数据备份：导出 ========================
+        function exportBackup() {
+            // 从 localStorage 读取完整的原始数据
+            var rawData = localStorage.getItem('drawer_journal_db');
+            if (!rawData) {
+                showToast('没有可备份的数据', 'info');
+                return;
+            }
+
+            // 构建备份包：包含数据、版本号、导出时间、应用标识
+            var backup = {
+                app: '生活抽屉手记',
+                version: '2.0',
+                exportedAt: new Date().toISOString(),
+                storageKey: 'drawer_journal_db',
+                darkMode: localStorage.getItem('journal_dark_mode') || 'false',
+                data: JSON.parse(rawData)
+            };
+
+            // 统计数据用于确认提示
+            var totalCards = 0;
+            var totalFolders = 0;
+            (backup.data.big_folders || []).forEach(function(bf) {
+                totalFolders += (bf.small_folders || []).length;
+                (bf.small_folders || []).forEach(function(sf) {
+                    totalCards += (sf.cards || []).length;
+                });
+            });
+
+            // 生成 JSON 字符串
+            var jsonStr = JSON.stringify(backup, null, 2);
+
+            // 创建 Blob 并触发下载
+            var blob = new Blob([jsonStr], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+
+            var a = document.createElement('a');
+            a.href = url;
+            // 文件名：shouji_2026-06-12.json
+            var now = new Date();
+            var dateStr = now.getFullYear() + '-' +
+                String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                String(now.getDate()).padStart(2, '0');
+            a.download = 'shouji_' + dateStr + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // 稍后释放 Blob URL
+            setTimeout(function() {
+                URL.revokeObjectURL(url);
+            }, 1000);
+
+            showToast(
+                '✅ 备份成功！' + backup.data.big_folders.length + ' 大类 · ' +
+                totalFolders + ' 分类 · ' + totalCards + ' 条手记',
+                'success'
+            );
+        }
+
+        // ======================== 🔥 数据备份：导入 ========================
+        function importBackup() {
+            // 触发隐藏的文件选择器
+            var fileInput = document.getElementById('import-file-input');
+            fileInput.value = '';  // 清空之前的选择，确保 change 事件触发
+            fileInput.click();
+        }
+
+        async function handleImportFile(input) {
+            var file = input.files[0];
+            if (!file) return;
+
+            // 校验文件类型
+            if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+                showToast('请选择 .json 备份文件', 'error');
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    var backup = JSON.parse(e.target.result);
+
+                    // ====== 校验备份格式 ======
+                    if (!backup.app || !backup.data || !backup.data.big_folders) {
+                        showToast('❌ 不是有效的手记备份文件', 'error');
+                        return;
+                    }
+
+                    // 统计导入数据
+                    var totalCards = 0;
+                    var totalFolders = 0;
+                    (backup.data.big_folders || []).forEach(function(bf) {
+                        totalFolders += (bf.small_folders || []).length;
+                        (bf.small_folders || []).forEach(function(sf) {
+                            totalCards += (sf.cards || []).length;
+                        });
+                    });
+
+                    // 导出时间（如果存在）
+                    var exportedInfo = '';
+                    if (backup.exportedAt) {
+                        var exportDate = new Date(backup.exportedAt);
+                        exportedInfo = '\n备份时间：' +
+                            exportDate.getFullYear() + '年' +
+                            (exportDate.getMonth() + 1) + '月' +
+                            exportDate.getDate() + '日 ' +
+                            String(exportDate.getHours()).padStart(2, '0') + ':' +
+                            String(exportDate.getMinutes()).padStart(2, '0');
+                    }
+
+                    // 当前数据统计
+                    var currentCards = db.big_folders.reduce(function(sum, bf) {
+                        return sum + bf.small_folders.reduce(function(s, sf) { return s + sf.cards.length; }, 0);
+                    }, 0);
+
+                    var warning = '';
+                    if (currentCards > 0) {
+                        warning = '\n\n⚠️ 警告：当前已有 ' + currentCards + ' 条手记，导入后将完全覆盖现有数据！';
+                    }
+
+                    // 弹窗确认
+                    var confirmed = await showModal(
+                        '📤 导入备份数据',
+                        '即将导入「' + backup.app + '」备份：' +
+                        '\n📁 ' + backup.data.big_folders.length + ' 个大类' +
+                        '\n📂 ' + totalFolders + ' 个分类' +
+                        '\n📝 ' + totalCards + ' 条手记' +
+                        exportedInfo +
+                        warning +
+                        '\n\n确定要导入吗？',
+                        '确认导入', '取消'
+                    );
+
+                    if (!confirmed) return;
+
+                    // ====== 执行导入 ======
+                    // 完整替换 localStorage 中的数据
+                    localStorage.setItem('drawer_journal_db', JSON.stringify(backup.data));
+
+                    // 恢复暗色模式设置
+                    if (backup.darkMode === 'true') {
+                        localStorage.setItem('journal_dark_mode', 'true');
+                        document.body.classList.add('dark');
+                        document.getElementById('dark-icon').textContent = '☀️';
+                    } else if (backup.darkMode === 'false') {
+                        localStorage.setItem('journal_dark_mode', 'false');
+                        document.body.classList.remove('dark');
+                        document.getElementById('dark-icon').textContent = '🌙';
+                    }
+
+                    // 重新加载内存中的 db
+                    db = backup.data;
+
+                    // 重置导航状态，返回主页
+                    currentView = 'big';
+                    activeBigId = null;
+                    activeSmallId = null;
+                    tempImgBase64 = '';
+
+                    // 如果有搜索栏打开，关闭它
+                    var searchBar = document.getElementById('search-bar');
+                    if (!searchBar.classList.contains('hidden')) {
+                        searchBar.classList.add('hidden');
+                        document.getElementById('search-input').value = '';
+                    }
+
+                    render();
+                    showToast(
+                        '✅ 导入成功！' + backup.data.big_folders.length + ' 大类 · ' +
+                        totalFolders + ' 分类 · ' + totalCards + ' 条手记已恢复',
+                        'success'
+                    );
+
+                } catch (err) {
+                    showToast('❌ 文件解析失败，请确认是有效的 shouji.json', 'error');
+                    console.error('导入备份失败：', err);
+                }
+            };
+
+            reader.onerror = function() {
+                showToast('❌ 文件读取失败', 'error');
+            };
+
+            reader.readAsText(file);
+        }
+
+        // ======================== 重命名操作 ========================
+        async function renameBigFolder(id) {
+            var bf = db.big_folders.find(function(b) { return b.id === id; });
+            if (!bf) return;
+            var newName = await showPrompt('✏️ 修改大类名称', '请输入新的名字：', bf.name);
+            if (newName && newName.trim() !== '') {
+                bf.name = newName.trim();
+                saveDB();
+                render();
+                showToast('已重命名为「' + bf.name + '」', 'success');
+            }
+        }
+
+        async function renameSmallFolder(bigId, smallId) {
+            var bf = db.big_folders.find(function(b) { return b.id === bigId; });
+            if (!bf) return;
+            var sf = bf.small_folders.find(function(s) { return s.id === smallId; });
+            if (!sf) return;
+            var newName = await showPrompt('✏️ 修改小分类名称', '请输入新的名字：', sf.name);
+            if (newName && newName.trim() !== '') {
+                sf.name = newName.trim();
+                saveDB();
+                render();
+                showToast('已重命名为「' + sf.name + '」', 'success');
+            }
+        }
+// ======================== 智能拦截并清洗 PDF 粘贴的空格和换行 ========================
+        document.addEventListener('paste', function(e) {
+            // 只在新建手记和修改手记的输入框中生效，不影响搜索框
+            if (e.target && (e.target.id === 'card-text' || e.target.id === 'edit-card-text')) {
+                // 阻止默认的乱码粘贴
+                e.preventDefault();
+
+                // 抓取剪贴板里的原始文本
+                var text = (e.clipboardData || window.clipboardData).getData('text');
+                if (!text) return;
+
+                var cleaned = text;
+
+                // 1. 消除挨着中文或中文标点的所有换行符（PDF特有的断行错乱）
+                cleaned = cleaned.replace(/([一-龥　-〿＀-￯])[\r\n]+/g, '$1');
+                cleaned = cleaned.replace(/[\r\n]+([一-龥　-〿＀-￯])/g, '$1');
+
+                // 2. 纯英文数字之间的换行，则聪明地转换为一个空格，确保英文不粘连
+                cleaned = cleaned.replace(/[\r\n]+/g, ' ');
+
+                // 3. 彻底消除夹在两个中文字符或中文标点之间的所有多余空格
+                cleaned = cleaned.replace(/([一-龥　-〿＀-￯])\s+([一-龥　-〿＀-￯])/g, '$1$2');
+
+                // --- 以下是将清洗好的干净文本，精准塞回你的光标所在位置 ---
+                var target = e.target;
+                var start = target.selectionStart;
+                var end = target.selectionEnd;
+                var value = target.value;
+
+                target.value = value.slice(0, start) + cleaned + value.slice(end);
+
+                // 贴心地把输入光标往后挪到新文本的末尾
+                target.selectionStart = target.selectionEnd = start + cleaned.length;
+
+                // 摇晃一下输入框，告诉网页"内容更新了"，触发自动保存
+                var inputEvent = new Event('input', { bubbles: true });
+                target.dispatchEvent(inputEvent);
+            }
+        });
+
+        // ======================== 启动 ========================
+        render();
+    </script>
+
+    <!-- ==================== Service Worker 离线缓存注册 ==================== -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(function(reg) { console.log('单机离线驱动注入成功！', reg.scope); })
+                    .catch(function(err) { console.error('驱动注入失败：', err); });
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "生活抽屉手记",
+  "short_name": "手记",
+  "description": "一个不联网、数据完全存在本地的极简生活手记",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0f2f5",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://api.iconify.design/fluent-emoji-flat:blue-book.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://api.iconify.design/fluent-emoji-flat:blue-book.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
